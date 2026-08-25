@@ -8,25 +8,73 @@ void main() {
   runApp(const CampusIntelligenceApp());
 }
 
-class CampusIntelligenceApp extends StatelessWidget {
+class CampusIntelligenceApp extends StatefulWidget {
   const CampusIntelligenceApp({super.key});
+
+  @override
+  State<CampusIntelligenceApp> createState() => _CampusIntelligenceAppState();
+}
+
+class _CampusIntelligenceAppState extends State<CampusIntelligenceApp> {
+  ThemeMode _themeMode = ThemeMode.light;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadThemePreference();
+  }
+
+  Future<void> _loadThemePreference() async {
+    final isDark = await StorageService.getDarkModePreference();
+    setState(() {
+      _themeMode = isDark ? ThemeMode.dark : ThemeMode.light;
+    });
+  }
+
+  void _toggleTheme(bool isDark) async {
+    await StorageService.saveDarkModePreference(isDark);
+    setState(() {
+      _themeMode = isDark ? ThemeMode.dark : ThemeMode.light;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Campus Intelligence',
       debugShowCheckedModeBanner: false,
+      themeMode: _themeMode,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
         useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.indigo,
+          brightness: Brightness.light,
+        ),
       ),
-      home: const HomeScreen(),
+      darkTheme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.indigo,
+          brightness: Brightness.dark,
+        ),
+      ),
+      home: HomeScreen(
+        isDarkMode: _themeMode == ThemeMode.dark,
+        onThemeChanged: _toggleTheme,
+      ),
     );
   }
 }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final bool isDarkMode;
+  final ValueChanged<bool> onThemeChanged;
+
+  const HomeScreen({
+    super.key,
+    required this.isDarkMode,
+    required this.onThemeChanged,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -35,7 +83,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool _assistantMemoryEnabled = true;
 
-  // Dynamic state lists
   final List<TaskItem> _scheduleItems = [
     TaskItem(id: '1', title: 'DBMS Lab', subtitle: 'Lab 3 • 10:00 AM', category: 'schedule'),
     TaskItem(id: '2', title: 'Mathematics', subtitle: 'Room 204 • 02:00 PM', category: 'schedule'),
@@ -141,6 +188,17 @@ class _HomeScreenState extends State<HomeScreen> {
           'Campus Intelligence',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
+        actions: [
+          IconButton(
+            icon: Icon(
+              widget.isDarkMode ? Icons.light_mode : Icons.dark_mode,
+            ),
+            tooltip: widget.isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+            onPressed: () {
+              widget.onThemeChanged(!widget.isDarkMode);
+            },
+          ),
+        ],
         elevation: 2,
       ),
       floatingActionButton: FloatingActionButton(
@@ -164,7 +222,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 20),
 
-            // AI Assistant Banner Button with Memory Toggle
             Card(
               color: Theme.of(context).colorScheme.primaryContainer,
               child: Padding(
@@ -206,7 +263,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 24),
 
-            // Today's Schedule Header + Navigation Button
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -261,6 +317,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
 class SectionHeader extends StatelessWidget {
   final String title;
+
   const SectionHeader({super.key, required this.title});
 
   @override

@@ -2,6 +2,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class StorageService {
   static const String _assistantMemoryKey = 'assistant_memory_enabled';
+  static const String _darkModeKey = 'dark_mode_enabled';
 
   // Save Assistant preference setting locally
   static Future<void> saveAssistantPreference(bool enabled) async {
@@ -13,5 +14,17 @@ class StorageService {
   static Future<bool> getAssistantPreference() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_assistantMemoryKey) ?? true;
+  }
+
+  // Save Dark Mode preference setting locally
+  static Future<void> saveDarkModePreference(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_darkModeKey, enabled);
+  }
+
+  // Retrieve Dark Mode preference setting
+  static Future<bool> getDarkModePreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_darkModeKey) ?? false;
   }
 }
