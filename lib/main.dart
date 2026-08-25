@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'models/task_item.dart';
+import 'screens/assistant_screen.dart';
+import 'screens/schedule_screen.dart';
 
 void main() {
   runApp(const CampusIntelligenceApp());
@@ -37,6 +39,10 @@ class HomeScreen extends StatelessWidget {
       TaskItem(id: '4', title: 'Python Record', subtitle: 'Due: Sep 8', category: 'deadline'),
     ];
 
+    final recentChanges = [
+      TaskItem(id: '5', title: 'CSE Lab OS Updated', subtitle: 'Windows → Ubuntu', category: 'change'),
+    ];
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -61,6 +67,7 @@ class HomeScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
 
+            // AI Assistant Banner Button
             Card(
               color: Theme.of(context).colorScheme.primaryContainer,
               child: ListTile(
@@ -71,19 +78,52 @@ class HomeScreen extends StatelessWidget {
                 ),
                 subtitle: const Text('Get answers grounded in verified campus memory'),
                 trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                onTap: () {},
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const AssistantScreen(),
+                    ),
+                  );
+                },
               ),
             ),
             const SizedBox(height: 24),
 
-            const SectionHeader(title: 'Today\'s Schedule'),
+            // Schedule Header + Navigation Button
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const SectionHeader(title: 'Today\'s Schedule'),
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ScheduleScreen(),
+                      ),
+                    );
+                  },
+                  child: const Text('View All'),
+                ),
+              ],
+            ),
             const SizedBox(height: 8),
             ItemListViewCard(items: scheduleItems, icon: Icons.class_, iconColor: Colors.indigo),
 
             const SizedBox(height: 24),
+
+            // Deadlines
             const SectionHeader(title: 'Upcoming Deadlines'),
             const SizedBox(height: 8),
             ItemListViewCard(items: deadlineItems, icon: Icons.priority_high, iconColor: Colors.red),
+
+            const SizedBox(height: 24),
+
+            // Restored: Recent Campus Changes (MemoryMap)
+            const SectionHeader(title: 'Recent Campus Changes'),
+            const SizedBox(height: 8),
+            ItemListViewCard(items: recentChanges, icon: Icons.update, iconColor: Colors.blue),
           ],
         ),
       ),
