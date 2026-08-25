@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'models/task_item.dart';
 import 'screens/assistant_screen.dart';
 import 'screens/schedule_screen.dart';
+import 'services/storage_service.dart';
 
 void main() {
   runApp(const CampusIntelligenceApp());
@@ -24,8 +25,35 @@ class CampusIntelligenceApp extends StatelessWidget {
   }
 }
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  bool _assistantMemoryEnabled = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPreference();
+  }
+
+  Future<void> _loadPreference() async {
+    final enabled = await StorageService.getAssistantPreference();
+    setState(() {
+      _assistantMemoryEnabled = enabled;
+    });
+  }
+
+  Future<void> _togglePreference(bool value) async {
+    await StorageService.saveAssistantPreference(value);
+    setState(() {
+      _assistantMemoryEnabled = value;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -67,30 +95,49 @@ class HomeScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
 
-            // AI Assistant Banner Button
+            // AI Assistant Banner Button with Memory Toggle
             Card(
               color: Theme.of(context).colorScheme.primaryContainer,
-              child: ListTile(
-                leading: const Icon(Icons.smart_toy, size: 32),
-                title: const Text(
-                  'Ask Campus Assistant',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: const Text('Get answers grounded in verified campus memory'),
-                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const AssistantScreen(),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.smart_toy, size: 32),
+                      title: const Text(
+                        'Ask Campus Assistant',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Text(_assistantMemoryEnabled
+                          ? 'Grounded in verified campus memory'
+                          : 'Memory mode disabled'),
+                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const AssistantScreen(),
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
+                    const Divider(height: 1, indent: 16, endIndent: 16),
+                    SwitchListTile(
+                      title: const Text(
+                        'Campus Memory Context',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                      ),
+                      value: _assistantMemoryEnabled,
+                      onChanged: _togglePreference,
+                      dense: true,
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 24),
 
-            // Schedule Header + Navigation Button
+            // Today's Schedule Header + Navigation Button
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -112,15 +159,11 @@ class HomeScreen extends StatelessWidget {
             ItemListViewCard(items: scheduleItems, icon: Icons.class_, iconColor: Colors.indigo),
 
             const SizedBox(height: 24),
-
-            // Deadlines
             const SectionHeader(title: 'Upcoming Deadlines'),
             const SizedBox(height: 8),
             ItemListViewCard(items: deadlineItems, icon: Icons.priority_high, iconColor: Colors.red),
 
             const SizedBox(height: 24),
-
-            // Restored: Recent Campus Changes (MemoryMap)
             const SectionHeader(title: 'Recent Campus Changes'),
             const SizedBox(height: 8),
             ItemListViewCard(items: recentChanges, icon: Icons.update, iconColor: Colors.blue),

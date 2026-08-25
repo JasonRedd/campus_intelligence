@@ -55,7 +55,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
                     decoration: BoxDecoration(
                       color: isUser
                           ? Theme.of(context).colorScheme.primary
-                          : Theme.of(context).colorScheme.surfaceVariant,
+                          : Theme.of(context).colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(12.0),
                     ),
                     child: Text(
