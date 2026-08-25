@@ -35,6 +35,21 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool _assistantMemoryEnabled = true;
 
+  // Dynamic state lists
+  final List<TaskItem> _scheduleItems = [
+    TaskItem(id: '1', title: 'DBMS Lab', subtitle: 'Lab 3 • 10:00 AM', category: 'schedule'),
+    TaskItem(id: '2', title: 'Mathematics', subtitle: 'Room 204 • 02:00 PM', category: 'schedule'),
+  ];
+
+  final List<TaskItem> _deadlineItems = [
+    TaskItem(id: '3', title: 'DBMS Assignment', subtitle: 'Due: Sep 5 • Lab 3', category: 'deadline'),
+    TaskItem(id: '4', title: 'Python Record', subtitle: 'Due: Sep 8', category: 'deadline'),
+  ];
+
+  final List<TaskItem> _recentChanges = [
+    TaskItem(id: '5', title: 'CSE Lab OS Updated', subtitle: 'Windows → Ubuntu', category: 'change'),
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -55,22 +70,71 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _toggleTask(TaskItem item) {
+    setState(() {
+      item.isCompleted = !item.isCompleted;
+    });
+  }
+
+  void _deleteTask(List<TaskItem> list, TaskItem item) {
+    setState(() {
+      list.removeWhere((t) => t.id == item.id);
+    });
+  }
+
+  void _showAddTaskDialog() {
+    final titleController = TextEditingController();
+    final subtitleController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add Schedule Item'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: titleController,
+              decoration: const InputDecoration(labelText: 'Title (e.g. OS Lab)'),
+            ),
+            TextField(
+              controller: subtitleController,
+              decoration: const InputDecoration(labelText: 'Details (e.g. Room 101 • 11:00 AM)'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (titleController.text.isNotEmpty) {
+                setState(() {
+                  _scheduleItems.add(
+                    TaskItem(
+                      id: DateTime.now().millisecondsSinceEpoch.toString(),
+                      title: titleController.text,
+                      subtitle: subtitleController.text.isEmpty
+                          ? 'Scheduled'
+                          : subtitleController.text,
+                      category: 'schedule',
+                    ),
+                  );
+                });
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final scheduleItems = [
-      TaskItem(id: '1', title: 'DBMS Lab', subtitle: 'Lab 3 • 10:00 AM', category: 'schedule'),
-      TaskItem(id: '2', title: 'Mathematics', subtitle: 'Room 204 • 02:00 PM', category: 'schedule'),
-    ];
-
-    final deadlineItems = [
-      TaskItem(id: '3', title: 'DBMS Assignment', subtitle: 'Due: Sep 5 • Lab 3', category: 'deadline'),
-      TaskItem(id: '4', title: 'Python Record', subtitle: 'Due: Sep 8', category: 'deadline'),
-    ];
-
-    final recentChanges = [
-      TaskItem(id: '5', title: 'CSE Lab OS Updated', subtitle: 'Windows → Ubuntu', category: 'change'),
-    ];
-
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -78,6 +142,11 @@ class _HomeScreenState extends State<HomeScreen> {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         elevation: 2,
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showAddTaskDialog,
+        tooltip: 'Add Schedule Item',
+        child: const Icon(Icons.add),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
@@ -156,17 +225,33 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
             const SizedBox(height: 8),
-            ItemListViewCard(items: scheduleItems, icon: Icons.class_, iconColor: Colors.indigo),
+            ItemListViewCard(
+              items: _scheduleItems,
+              icon: Icons.class_,
+              iconColor: Colors.indigo,
+              onToggle: _toggleTask,
+              onDelete: (item) => _deleteTask(_scheduleItems, item),
+            ),
 
             const SizedBox(height: 24),
             const SectionHeader(title: 'Upcoming Deadlines'),
             const SizedBox(height: 8),
-            ItemListViewCard(items: deadlineItems, icon: Icons.priority_high, iconColor: Colors.red),
+            ItemListViewCard(
+              items: _deadlineItems,
+              icon: Icons.priority_high,
+              iconColor: Colors.red,
+              onToggle: _toggleTask,
+              onDelete: (item) => _deleteTask(_deadlineItems, item),
+            ),
 
             const SizedBox(height: 24),
             const SectionHeader(title: 'Recent Campus Changes'),
             const SizedBox(height: 8),
-            ItemListViewCard(items: recentChanges, icon: Icons.update, iconColor: Colors.blue),
+            ItemListViewCard(
+              items: _recentChanges,
+              icon: Icons.update,
+              iconColor: Colors.blue,
+            ),
           ],
         ),
       ),
@@ -191,16 +276,34 @@ class ItemListViewCard extends StatelessWidget {
   final List<TaskItem> items;
   final IconData icon;
   final Color iconColor;
+  final Function(TaskItem)? onToggle;
+  final Function(TaskItem)? onDelete;
 
   const ItemListViewCard({
     super.key,
     required this.items,
     required this.icon,
     required this.iconColor,
+    this.onToggle,
+    this.onDelete,
   });
 
   @override
   Widget build(BuildContext context) {
+    if (items.isEmpty) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(16.0),
+          child: Center(
+            child: Text(
+              'No items available',
+              style: TextStyle(color: Colors.grey),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Card(
       child: Column(
         children: items.map((item) {
@@ -208,9 +311,35 @@ class ItemListViewCard extends StatelessWidget {
           return Column(
             children: [
               ListTile(
-                leading: Icon(icon, color: iconColor),
-                title: Text(item.title),
+                leading: Icon(
+                  icon,
+                  color: item.isCompleted ? Colors.grey : iconColor,
+                ),
+                title: Text(
+                  item.title,
+                  style: TextStyle(
+                    decoration: item.isCompleted
+                        ? TextDecoration.lineThrough
+                        : TextDecoration.none,
+                    color: item.isCompleted ? Colors.grey : null,
+                  ),
+                ),
                 subtitle: Text(item.subtitle),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (onToggle != null)
+                      Checkbox(
+                        value: item.isCompleted,
+                        onChanged: (_) => onToggle!(item),
+                      ),
+                    if (onDelete != null)
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, color: Colors.grey),
+                        onPressed: () => onDelete!(item),
+                      ),
+                  ],
+                ),
               ),
               if (!isLast) const Divider(height: 1),
             ],
