@@ -16,8 +16,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
   bool _isTyping = false;
 
   // Your API Key
-  static const String _apiKey =
-      'AQ.Ab8RN6LU0S-qdU2JwJ_ILTTxcI5RjaU5sLsedxX7akRY75kt_w';
+  static const String _apiKey = String.fromEnvironment('GEMINI_API_KEY');
 
   @override
   void initState() {
