@@ -9,10 +9,12 @@ import 'models/task_item.dart';
 import 'firebase_options.dart';
 import 'screens/auth_screen.dart';
 import 'screens/assistant_screen.dart';
+import 'screens/calendar_screen.dart';
 import 'screens/schedule_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/tasks_screen.dart';
 import 'services/storage_service.dart';
+import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -67,20 +69,8 @@ class _CampusIntelligenceAppState extends State<CampusIntelligenceApp> {
       title: 'Campus Intelligence',
       debugShowCheckedModeBanner: false,
       themeMode: _themeMode,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.indigo,
-          brightness: Brightness.light,
-        ),
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.indigo,
-          brightness: Brightness.dark,
-        ),
-      ),
+      theme: CampusTheme.light(),
+      darkTheme: CampusTheme.dark(),
       home: widget.firebaseReady
           ? StreamBuilder<User?>(
               stream: FirebaseAuth.instance.authStateChanges(),
@@ -324,6 +314,11 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.calendar_month),
+            tooltip: 'Open calendar',
+            onPressed: _openCalendar,
+          ),
+          IconButton(
             icon: Icon(widget.isDarkMode ? Icons.light_mode : Icons.dark_mode),
             tooltip: widget.isDarkMode
                 ? 'Switch to Light Mode'
@@ -476,6 +471,20 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
 
             const SizedBox(height: 24),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.calendar_month),
+                title: const Text(
+                  'Calendar',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                subtitle: const Text('View classes and deadlines together.'),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                onTap: _openCalendar,
+              ),
+            ),
+
+            const SizedBox(height: 24),
             const SectionHeader(title: 'Recent Campus Changes'),
             const SizedBox(height: 8),
             ItemListViewCard(
@@ -484,6 +493,27 @@ class _HomeScreenState extends State<HomeScreen> {
               iconColor: Colors.blue,
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _openCalendar() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CalendarScreen(
+          scheduleItems: _scheduleItems,
+          deadlineItems: _deadlineItems,
+          onAddItem: (item) {
+            setState(() {
+              if (item.category == 'schedule') {
+                _scheduleItems.add(item);
+              } else {
+                _deadlineItems.add(item);
+              }
+            });
+          },
         ),
       ),
     );

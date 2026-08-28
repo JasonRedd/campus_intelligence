@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 enum TaskStatus { todo, inProgress, completed }
 
@@ -52,11 +54,63 @@ class _TasksScreenState extends State<TasksScreen>
       status: TaskStatus.completed,
     ),
   ];
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _loadTasks();
+  }
+
+  CollectionReference<Map<String, dynamic>> get _tasksCollection {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('tasks');
+  }
+
+  Future<void> _loadTasks() async {
+    final snapshot = await _tasksCollection.orderBy('createdAt').get();
+    if (!mounted) return;
+    if (snapshot.docs.isNotEmpty) {
+      _tasks
+        ..clear()
+        ..addAll(snapshot.docs.map(_taskFromDocument));
+    } else {
+      for (final task in _tasks) {
+        await _saveTask(task);
+      }
+    }
+    setState(() => _isLoading = false);
+  }
+
+  AssignmentTask _taskFromDocument(
+    QueryDocumentSnapshot<Map<String, dynamic>> document,
+  ) {
+    final data = document.data();
+    return AssignmentTask(
+      id: document.id,
+      title: data['title'] as String,
+      details: data['details'] as String,
+      priority: TaskPriority.values[data['priority'] as int],
+      status: TaskStatus.values[data['status'] as int],
+    );
+  }
+
+  Future<void> _saveTask(AssignmentTask task) {
+    return _tasksCollection.doc(task.id).set({
+      'title': task.title,
+      'details': task.details,
+      'priority': task.priority.index,
+      'status': task.status.index,
+      'createdAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> _deleteStoredTask(String id) {
+    return _tasksCollection.doc(id).delete();
   }
 
   @override
@@ -84,11 +138,65 @@ class _TasksScreenState extends State<TasksScreen>
         icon: const Icon(Icons.add),
         label: const Text('Add task'),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: TaskStatus.values.map(_taskList).toList(),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                _buildProgressSummary(),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: TaskStatus.values.map(_taskList).toList(),
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildProgressSummary() {
+    return Card(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+        child: Column(
+          children: [
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Daily progress',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _ProgressBar(
+              label: 'All tasks',
+              tasks: _tasks,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(height: 10),
+            for (final priority in TaskPriority.values) ...[
+              _ProgressBar(
+                label: '${_priorityLabel(priority)} priority',
+                tasks: _tasks
+                    .where((task) => task.priority == priority)
+                    .toList(),
+                color: _priorityColor(priority),
+              ),
+              if (priority != TaskPriority.low) const SizedBox(height: 10),
+            ],
+          ],
+        ),
       ),
     );
+  }
+
+  Color _priorityColor(TaskPriority priority) {
+    return switch (priority) {
+      TaskPriority.high => Colors.red,
+      TaskPriority.medium => Colors.orange,
+      TaskPriority.low => Colors.green,
+    };
   }
 
   Widget _taskList(TaskStatus status) {
@@ -126,6 +234,7 @@ class _TasksScreenState extends State<TasksScreen>
           ),
           onDismissed: (_) {
             setState(() => _tasks.removeWhere((item) => item.id == task.id));
+            _deleteStoredTask(task.id);
             ScaffoldMessenger.of(context)
                 .showSnackBar(SnackBar(content: Text('${task.title} deleted')));
           },
@@ -135,9 +244,11 @@ class _TasksScreenState extends State<TasksScreen>
               setState(() {
                 task.status = checked ? TaskStatus.completed : TaskStatus.todo;
               });
+              _saveTask(task);
             },
             onStatusChanged: (newStatus) {
               setState(() => task.status = newStatus);
+              _saveTask(task);
               _tabController.animateTo(newStatus.index);
             },
           ),
@@ -210,16 +321,16 @@ class _TasksScreenState extends State<TasksScreen>
                   final title = titleController.text.trim();
                   if (title.isEmpty) return;
                   setState(() {
-                    _tasks.add(
-                      AssignmentTask(
-                        id: DateTime.now().microsecondsSinceEpoch.toString(),
-                        title: title,
-                        details: detailsController.text.trim().isEmpty
-                            ? 'No notes added'
-                            : detailsController.text.trim(),
-                        priority: priority,
-                      ),
+                    final task = AssignmentTask(
+                      id: DateTime.now().microsecondsSinceEpoch.toString(),
+                      title: title,
+                      details: detailsController.text.trim().isEmpty
+                          ? 'No notes added'
+                          : detailsController.text.trim(),
+                      priority: priority,
                     );
+                    _tasks.add(task);
+                    _saveTask(task);
                   });
                   Navigator.pop(context);
                 },
@@ -309,6 +420,54 @@ class _PriorityBadge extends StatelessWidget {
       backgroundColor: color.withAlpha(30),
       side: BorderSide(color: color.withAlpha(100)),
       visualDensity: VisualDensity.compact,
+    );
+  }
+}
+
+class _ProgressBar extends StatelessWidget {
+  final String label;
+  final List<AssignmentTask> tasks;
+  final Color color;
+
+  const _ProgressBar({
+    required this.label,
+    required this.tasks,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final completed = tasks
+        .where((task) => task.status == TaskStatus.completed)
+        .length;
+    final progress = tasks.isEmpty ? 0.0 : completed / tasks.length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+            Text(
+              tasks.isEmpty
+                  ? 'No tasks'
+                  : '$completed of ${tasks.length} • ${(progress * 100).round()}%',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+        const SizedBox(height: 5),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: LinearProgressIndicator(
+            value: progress,
+            minHeight: 8,
+            color: color,
+            backgroundColor: color.withAlpha(35),
+          ),
+        ),
+      ],
     );
   }
 }

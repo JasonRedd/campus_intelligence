@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../services/storage_service.dart';
@@ -32,6 +34,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _loadProfile() async {
     final profile = await StorageService.getProfile();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('profile')
+          .doc('details')
+          .get();
+      final data = snapshot.data();
+      if (data != null) {
+        profile['name'] = data['name'] as String? ?? profile['name']!;
+        profile['phone'] = data['phone'] as String? ?? profile['phone']!;
+        profile['gender'] = data['gender'] as String? ?? profile['gender']!;
+        profile['age'] = data['age'] as String? ?? profile['age']!;
+        profile['image'] = data['image'] as String? ?? profile['image']!;
+      }
+    }
     if (!mounted) return;
     _nameController.text = profile['name']!;
     _phoneController.text = profile['phone']!;
@@ -45,8 +64,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _chooseImage() async {
     final picked = await ImagePicker().pickImage(
       source: ImageSource.gallery,
-      imageQuality: 75,
-      maxWidth: 600,
+      imageQuality: 55,
+      maxWidth: 400,
     );
     if (picked == null) return;
     final bytes = await picked.readAsBytes();
@@ -63,6 +82,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
       age: _ageController.text.trim(),
       imageBase64: _profileImage == null ? null : base64Encode(_profileImage!),
     );
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('profile')
+          .doc('details')
+          .set({
+            'name': _nameController.text.trim(),
+            'phone': _phoneController.text.trim(),
+            'gender': _gender,
+            'age': _ageController.text.trim(),
+            'image': _profileImage == null ? '' : base64Encode(_profileImage!),
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+    }
     if (!mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(const SnackBar(content: Text('Profile saved')));
