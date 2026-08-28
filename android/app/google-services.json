@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "809243284544",
+    "project_id": "campus-intelligence",
+    "storage_bucket": "campus-intelligence.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:809243284544:android:7f25a095fc0bff69a0bba5",
+        "android_client_info": {
+          "package_name": "com.example.campus_intelligence"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC595mcOQh4sIW-iJR53vy0eURa8lgosJ0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
