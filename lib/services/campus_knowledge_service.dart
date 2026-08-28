@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/campus_knowledge.dart';
+import '../models/task_item.dart';
 
 class CampusKnowledgeService {
   static Future<String> _collegeId() async {
@@ -26,6 +27,45 @@ class CampusKnowledgeService {
         .collection('colleges')
         .doc(collegeId)
         .collection('knowledge');
+  }
+
+  static Future<CollectionReference<Map<String, dynamic>>> _changes() async {
+    final collegeId = await _collegeId();
+    return FirebaseFirestore.instance
+        .collection('colleges')
+        .doc(collegeId)
+        .collection('changes');
+  }
+
+  static Stream<List<TaskItem>> watchRecentChanges() async* {
+    final changes = await _changes();
+    yield* changes
+        .orderBy('createdAt', descending: true)
+        .limit(5)
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs.map((doc) {
+            final data = doc.data();
+            return TaskItem(
+              id: doc.id,
+              title: data['title'] as String? ?? 'Campus update',
+              subtitle: data['subtitle'] as String? ?? 'MemoryMap changed',
+              category: 'change',
+            );
+          }).toList(),
+        );
+  }
+
+  static Future<void> _recordChange({
+    required String title,
+    required String subtitle,
+  }) async {
+    final changes = await _changes();
+    await changes.add({
+      'title': title,
+      'subtitle': subtitle,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
   }
 
   static Stream<List<CampusKnowledge>> watchKnowledge() async* {
@@ -74,6 +114,10 @@ class CampusKnowledgeService {
       'createdAt': FieldValue.serverTimestamp(),
     });
     await batch.commit();
+    await _recordChange(
+      title: title,
+      subtitle: 'New ${category.toLowerCase()} added to MemoryMap',
+    );
     return reference.id;
   }
 
@@ -84,6 +128,10 @@ class CampusKnowledgeService {
       'trustScore': 0.8,
       'updatedAt': FieldValue.serverTimestamp(),
     });
+    await _recordChange(
+      title: knowledge.title,
+      subtitle: 'Knowledge verified by the campus community',
+    );
   }
 
   static Future<void> report(CampusKnowledge knowledge) async {
@@ -100,5 +148,9 @@ class CampusKnowledgeService {
       'hasConflict': true,
       'updatedAt': FieldValue.serverTimestamp(),
     });
+    await _recordChange(
+      title: knowledge.title,
+      subtitle: 'Conflict reported on MemoryMap knowledge',
+    );
   }
 }

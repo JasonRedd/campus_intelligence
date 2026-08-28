@@ -19,6 +19,7 @@ import 'screens/campus_feed_screen.dart';
 import 'screens/tasks_screen.dart';
 import 'services/storage_service.dart';
 import 'services/campus_data_service.dart';
+import 'services/campus_knowledge_service.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -569,10 +570,22 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 24),
             const SectionHeader(title: 'Recent Campus Changes'),
             const SizedBox(height: 8),
-            ItemListViewCard(
-              items: _recentChanges,
-              icon: Icons.update,
-              iconColor: Colors.blue,
+            StreamBuilder<List<TaskItem>>(
+              stream: CampusKnowledgeService.watchRecentChanges(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return ItemListViewCard(
+                    items: _recentChanges,
+                    icon: Icons.update,
+                    iconColor: Colors.blue,
+                  );
+                }
+                return ItemListViewCard(
+                  items: snapshot.data ?? _recentChanges,
+                  icon: Icons.update,
+                  iconColor: Colors.blue,
+                );
+              },
             ),
           ],
         ),

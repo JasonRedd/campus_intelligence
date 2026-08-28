@@ -15,6 +15,7 @@ class _CollegeOnboardingScreenState extends State<CollegeOnboardingScreen> {
   final _collegeController = TextEditingController();
   final _addressController = TextEditingController();
   bool _isSaving = false;
+  bool _confirmedCollege = false;
 
   @override
   void dispose() {
@@ -29,6 +30,14 @@ class _CollegeOnboardingScreenState extends State<CollegeOnboardingScreen> {
       '-',
     );
     return normalized.replaceAll(RegExp(r'^-+|-+$'), '');
+  }
+
+  void _updateCollegePreview(String value) {
+    if (_confirmedCollege) {
+      setState(() => _confirmedCollege = false);
+    } else {
+      setState(() {});
+    }
   }
 
   Future<void> _continue() async {
@@ -125,6 +134,7 @@ class _CollegeOnboardingScreenState extends State<CollegeOnboardingScreen> {
                               value.trim().length >= 3
                           ? null
                           : 'Enter your college or university name',
+                      onChanged: _updateCollegePreview,
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -141,9 +151,57 @@ class _CollegeOnboardingScreenState extends State<CollegeOnboardingScreen> {
                           ? null
                           : 'Enter the college address',
                     ),
+                    if (_collegeId(_collegeController.text).isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Card(
+                        color: theme.colorScheme.primaryContainer.withAlpha(90),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Your campus zone',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              SelectableText(
+                                _collegeId(_collegeController.text),
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  color: theme.colorScheme.secondary,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'This ID keeps your MemoryMap, feed, and campus updates in the correct college environment.',
+                                style: theme.textTheme.bodySmall,
+                              ),
+                              CheckboxListTile(
+                                contentPadding: EdgeInsets.zero,
+                                value: _confirmedCollege,
+                                onChanged: (value) => setState(
+                                  () => _confirmedCollege = value ?? false,
+                                ),
+                                title: const Text(
+                                  'I confirm this is my college',
+                                ),
+                                controlAffinity:
+                                    ListTileControlAffinity.leading,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 24),
                     FilledButton.icon(
-                      onPressed: _isSaving ? null : _continue,
+                      onPressed: _isSaving || !_confirmedCollege
+                          ? null
+                          : _continue,
                       icon: _isSaving
                           ? const SizedBox(
                               width: 18,
