@@ -11,8 +11,11 @@ import 'firebase_options.dart';
 import 'screens/auth_screen.dart';
 import 'screens/assistant_screen.dart';
 import 'screens/calendar_screen.dart';
+import 'screens/college_onboarding_screen.dart';
 import 'screens/schedule_screen.dart';
 import 'screens/profile_screen.dart';
+import 'screens/memory_map_screen.dart';
+import 'screens/campus_feed_screen.dart';
 import 'screens/tasks_screen.dart';
 import 'services/storage_service.dart';
 import 'services/campus_data_service.dart';
@@ -83,15 +86,57 @@ class _CampusIntelligenceAppState extends State<CampusIntelligenceApp> {
                   );
                 }
                 if (snapshot.hasData) {
-                  return HomeScreen(
+                  return _AuthenticatedEntry(
                     isDarkMode: _themeMode == ThemeMode.dark,
                     onThemeChanged: _toggleTheme,
                   );
                 }
+
                 return const AuthScreen();
               },
             )
           : const FirebaseSetupScreen(),
+    );
+  }
+
+}
+
+class _AuthenticatedEntry extends StatelessWidget {
+  final bool isDarkMode;
+  final ValueChanged<bool> onThemeChanged;
+
+  const _AuthenticatedEntry({
+    required this.isDarkMode,
+    required this.onThemeChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return const AuthScreen();
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('profile')
+          .doc('details')
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final data = snapshot.data?.data();
+        if (data?['collegeId'] is! String ||
+            (data?['collegeId'] as String).isEmpty) {
+          return const CollegeOnboardingScreen();
+        }
+        return HomeScreen(
+          isDarkMode: isDarkMode,
+          onThemeChanged: onThemeChanged,
+        );
+      },
     );
   }
 }
@@ -766,6 +811,30 @@ class _HomeScreenState extends State<HomeScreen> {
                 MaterialPageRoute(builder: (_) => ProfileScreen(email: email)),
               );
               await _loadProfileImage();
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.hub_outlined),
+            title: const Text('MemoryMap'),
+            subtitle: const Text('Shared campus knowledge'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const MemoryMapScreen()),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.dynamic_feed_outlined),
+            title: const Text('Campus Feed'),
+            subtitle: const Text('Connect with your campus'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const CampusFeedScreen()),
+              );
             },
           ),
           ListTile(

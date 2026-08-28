@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/task_item.dart';
 
 class ScheduleScreen extends StatefulWidget {
@@ -12,13 +14,59 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _selectedCategory = 'All';
 
-  final List<TaskItem> _allScheduleItems = [
+  final List<TaskItem> _defaultScheduleItems = [
     TaskItem(id: '1', title: 'DBMS Lab', subtitle: 'Lab 3 • 10:00 AM', category: 'class'),
     TaskItem(id: '2', title: 'Mathematics', subtitle: 'Room 204 • 02:00 PM', category: 'class'),
     TaskItem(id: '3', title: 'Operating Systems Midterm', subtitle: 'Hall A • Sep 10, 10:00 AM', category: 'exam'),
     TaskItem(id: '4', title: 'Python Programming Workshop', subtitle: 'Auditorium • Sep 12, 03:00 PM', category: 'workshop'),
     TaskItem(id: '5', title: 'Computer Networks Lecture', subtitle: 'Room 102 • 11:30 AM', category: 'class'),
   ];
+  bool _isSeeding = false;
+
+  CollectionReference<Map<String, dynamic>> get _scheduleCollection {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      throw StateError('A signed-in user is required to access the schedule.');
+    }
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('schedule');
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> get _scheduleStream =>
+      _scheduleCollection.orderBy('createdAt').snapshots();
+
+  Future<void> _seedDefaults() async {
+    if (_isSeeding) return;
+    _isSeeding = true;
+    try {
+      final batch = FirebaseFirestore.instance.batch();
+      for (final item in _defaultScheduleItems) {
+        batch.set(_scheduleCollection.doc(item.id), {
+          'title': item.title,
+          'subtitle': item.subtitle,
+          'category': item.category,
+          'isCompleted': item.isCompleted,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+    } finally {
+      _isSeeding = false;
+    }
+  }
+
+  TaskItem _fromDocument(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data();
+    return TaskItem(
+      id: doc.id,
+      title: data['title'] as String? ?? 'Untitled event',
+      subtitle: data['subtitle'] as String? ?? 'No details specified',
+      category: data['category'] as String? ?? 'class',
+      isCompleted: data['isCompleted'] as bool? ?? false,
+    );
+  }
 
   @override
   void dispose() {
@@ -28,17 +76,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final query = _searchController.text.toLowerCase();
-    
-    // Filter items based on search query and category selection
-    final filteredItems = _allScheduleItems.where((item) {
-      final matchesQuery = item.title.toLowerCase().contains(query) ||
-          item.subtitle.toLowerCase().contains(query);
-      final matchesCategory = _selectedCategory == 'All' ||
-          item.category.toLowerCase() == _selectedCategory.toLowerCase();
-      return matchesQuery && matchesCategory;
-    }).toList();
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Schedule'),
@@ -107,14 +144,36 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
             // Filtered Schedule List
             Expanded(
-              child: filteredItems.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'No matching events found',
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                    )
-                  : ListView.builder(
+              child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                stream: _scheduleStream,
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Text('Unable to load schedule: ${snapshot.error}'),
+                    );
+                  }
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final query = _searchController.text.toLowerCase();
+                  final filteredItems = snapshot.data!.docs
+                      .map(_fromDocument)
+                      .where((item) {
+                    final matchesQuery =
+                        item.title.toLowerCase().contains(query) ||
+                            item.subtitle.toLowerCase().contains(query);
+                    final matchesCategory = _selectedCategory == 'All' ||
+                        item.category.toLowerCase() ==
+                            _selectedCategory.toLowerCase();
+                    return matchesQuery && matchesCategory;
+                  }).toList();
+                  if (snapshot.data!.docs.isEmpty) {
+                    _seedDefaults();
+                  }
+                  if (filteredItems.isEmpty) {
+                    return const Center(child: Text('No matching events found'));
+                  }
+                  return ListView.builder(
                       itemCount: filteredItems.length,
                       itemBuilder: (context, index) {
                         final item = filteredItems[index];
@@ -167,7 +226,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                           ),
                         );
                       },
-                    ),
+                    );
+                },
+              ),
             ),
           ],
         ),
