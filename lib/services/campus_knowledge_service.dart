@@ -31,10 +31,14 @@ class CampusKnowledgeService {
   static Stream<List<CampusKnowledge>> watchKnowledge() async* {
     final collection = await _knowledge();
     yield* collection
-        .where('isPublic', isEqualTo: true)
         .orderBy('updatedAt', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs.map(CampusKnowledge.fromDocument).toList());
+        .map(
+          (snapshot) => snapshot.docs
+              .map(CampusKnowledge.fromDocument)
+              .where((knowledge) => knowledge.isPublic)
+              .toList(),
+        );
   }
 
   static Future<String> addKnowledge({
