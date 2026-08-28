@@ -31,7 +31,7 @@ class StorageService {
   // Retrieve Dark Mode preference setting
   static Future<bool> getDarkModePreference() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_darkModeKey) ?? false;
+    return prefs.getBool(_darkModeKey) ?? true;
   }
 
   static Future<void> saveChatHistory(List<String> messages) async {

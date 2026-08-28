@@ -123,7 +123,7 @@ class _TasksScreenState extends State<TasksScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Tasks & Assignments'),
+        title: const Text('Tasks'),
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
@@ -142,6 +142,24 @@ class _TasksScreenState extends State<TasksScreen>
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.insights,
+                        color: Theme.of(context).colorScheme.secondary,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Progress command center',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
                 _buildProgressSummary(),
                 Expanded(
                   child: TabBarView(
@@ -161,11 +179,13 @@ class _TasksScreenState extends State<TasksScreen>
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
         child: Column(
           children: [
-            const Align(
+            Align(
               alignment: Alignment.centerLeft,
               child: Text(
                 'Daily progress',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
               ),
             ),
             const SizedBox(height: 12),
@@ -364,9 +384,17 @@ class _TaskCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        leading: Checkbox(
-          value: completed,
-          onChanged: (value) => onChanged(value ?? false),
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.primary.withAlpha(25),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Checkbox(
+            value: completed,
+            onChanged: (value) => onChanged(value ?? false),
+            visualDensity: VisualDensity.compact,
+          ),
         ),
         title: Text(
           task.title,

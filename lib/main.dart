@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +15,7 @@ import 'screens/schedule_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/tasks_screen.dart';
 import 'services/storage_service.dart';
+import 'services/campus_data_service.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -186,11 +188,44 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _loadPreference();
     _loadProfileImage();
+    _loadCampusItems();
+  }
+
+  Future<void> _loadCampusItems() async {
+    final items = await CampusDataService.loadItems();
+    if (!mounted) return;
+    if (items.isEmpty) {
+      for (final item in [..._scheduleItems, ..._deadlineItems]) {
+        await CampusDataService.saveItem(item);
+      }
+      return;
+    }
+    setState(() {
+      _scheduleItems
+        ..clear()
+        ..addAll(items.where((item) => item.category == 'schedule'));
+      _deadlineItems
+        ..clear()
+        ..addAll(items.where((item) => item.category == 'deadline'));
+    });
   }
 
   Future<void> _loadProfileImage() async {
     final profile = await StorageService.getProfile();
-    final encodedImage = profile['image'] ?? '';
+    var encodedImage = profile['image'] ?? '';
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('profile')
+          .doc('details')
+          .get();
+      encodedImage = snapshot.data()?['image'] as String? ?? encodedImage;
+      if (encodedImage.isNotEmpty) {
+        await StorageService.saveProfileImage(encodedImage);
+      }
+    }
     if (!mounted) return;
     setState(() {
       _profileImage = encodedImage.isEmpty ? null : base64Decode(encodedImage);
@@ -350,6 +385,8 @@ class _HomeScreenState extends State<HomeScreen> {
               style: TextStyle(color: Colors.grey, fontSize: 16),
             ),
             const SizedBox(height: 20),
+            _buildDashboardOverview(context),
+            const SizedBox(height: 20),
 
             Card(
               color: Theme.of(context).colorScheme.primaryContainer,
@@ -498,6 +535,48 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildDashboardOverview(BuildContext context) {
+    final completedDeadlines =
+        _deadlineItems.where((item) => item.isCompleted).length;
+    final progress = _deadlineItems.isEmpty
+        ? 0
+        : ((completedDeadlines / _deadlineItems.length) * 100).round();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 620;
+        final cards = [
+          _OverviewCard(
+            label: 'Classes today',
+            value: '${_scheduleItems.length}',
+            icon: Icons.calendar_today,
+            color: const Color(0xFF28A9FF),
+          ),
+          _OverviewCard(
+            label: 'Deadlines',
+            value: '${_deadlineItems.length}',
+            icon: Icons.assignment_late,
+            color: const Color(0xFFFFB547),
+          ),
+          _OverviewCard(
+            label: 'Completion',
+            value: '$progress%',
+            icon: Icons.trending_up,
+            color: const Color(0xFF00D5D5),
+          ),
+        ];
+        return GridView.count(
+          crossAxisCount: compact ? 1 : 3,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          childAspectRatio: compact ? 4.2 : 1.55,
+          children: cards,
+        );
+      },
+    );
+  }
+
   void _openCalendar() {
     Navigator.push(
       context,
@@ -513,6 +592,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 _deadlineItems.add(item);
               }
             });
+            CampusDataService.saveItem(item);
           },
         ),
       ),
@@ -529,16 +609,16 @@ class _HomeScreenState extends State<HomeScreen> {
       if (values.length < 4) {
         return 'To add a class, use: add schedule | subject | room | time | professor';
       }
-      setState(() {
-        _scheduleItems.add(
-          TaskItem(
+      final item = TaskItem(
             id: DateTime.now().millisecondsSinceEpoch.toString(),
             title: values[0],
             subtitle: '${values[1]} • ${values[2]} • ${values[3]}',
             category: 'schedule',
-          ),
-        );
+          );
+      setState(() {
+        _scheduleItems.add(item);
       });
+      await CampusDataService.saveItem(item);
       return 'Added ${values[0]} to your schedule.';
     }
 
@@ -548,16 +628,16 @@ class _HomeScreenState extends State<HomeScreen> {
       if (values.length < 2) {
         return 'To add a deadline, use: add deadline | title | due date and notes';
       }
-      setState(() {
-        _deadlineItems.add(
-          TaskItem(
+      final item = TaskItem(
             id: DateTime.now().millisecondsSinceEpoch.toString(),
             title: values[0],
             subtitle: values[1],
             category: 'deadline',
-          ),
-        );
+          );
+      setState(() {
+        _deadlineItems.add(item);
       });
+      await CampusDataService.saveItem(item);
       return 'Added ${values[0]} to your deadlines.';
     }
 
@@ -583,6 +663,7 @@ class _HomeScreenState extends State<HomeScreen> {
           isCompleted: current.isCompleted,
         );
       });
+      await CampusDataService.saveItem(items[index]);
       return 'Updated ${values[1]}.';
     }
 
@@ -604,7 +685,9 @@ class _HomeScreenState extends State<HomeScreen> {
       final index = _findItemIndex(items, search);
       if (index == -1) return 'I could not find "$search".';
       final removed = items[index].title;
+      final removedId = items[index].id;
       setState(() => items.removeAt(index));
+      await CampusDataService.deleteItem(removedId);
       return 'Removed $removed.';
     }
 
@@ -619,6 +702,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final index = _findItemIndex(items, search);
       if (index == -1) return 'I could not find deadline "$search".';
       setState(() => items[index].isCompleted = true);
+      await CampusDataService.saveItem(items[index]);
       return 'Marked ${items[index].title} as completed.';
     }
 
@@ -715,6 +799,65 @@ class SectionHeader extends StatelessWidget {
       title,
       style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
     );
+  }
+}
+
+class _OverviewCard extends StatelessWidget {
+    final String label;
+    final String value;
+    final IconData icon;
+    final Color color;
+
+    const _OverviewCard({
+      required this.label,
+      required this.value,
+      required this.icon,
+      required this.color,
+    });
+
+    @override
+    Widget build(BuildContext context) {
+      return Card(
+        color: Theme.of(context).colorScheme.surfaceContainer,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: color.withAlpha(35),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, color: color),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      value,
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
   }
 }
 

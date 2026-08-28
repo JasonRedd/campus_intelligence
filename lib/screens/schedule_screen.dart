@@ -41,12 +41,20 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('UniVault Schedule'),
+        title: const Text('Schedule'),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text(
+              'Your academic command center',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 16),
             // Search Input Field
             TextField(
               controller: _searchController,
@@ -63,15 +71,16 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                         },
                       )
                     : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12.0),
-                ),
               ),
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 12),
 
-            // Category Filter Chips
+            Text(
+              'Filter events',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+            const SizedBox(height: 8),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
@@ -109,18 +118,50 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       itemCount: filteredItems.length,
                       itemBuilder: (context, index) {
                         final item = filteredItems[index];
+                        final categoryColor = _getCategoryColor(
+                          context,
+                          item.category,
+                        );
                         return Card(
-                          margin: const EdgeInsets.only(bottom: 8.0),
-                          child: ListTile(
-                            leading: CircleAvatar(
-                              child: Icon(_getCategoryIcon(item.category)),
-                            ),
-                            title: Text(item.title),
-                            subtitle: Text(item.subtitle),
-                            trailing: Chip(
-                              label: Text(
-                                item.category.toUpperCase(),
-                                style: const TextStyle(fontSize: 10),
+                          margin: const EdgeInsets.only(bottom: 12.0),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: ListTile(
+                              leading: Container(
+                                width: 46,
+                                height: 46,
+                                decoration: BoxDecoration(
+                                  color: categoryColor.withAlpha(35),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: categoryColor.withAlpha(110),
+                                  ),
+                                ),
+                                child: Icon(
+                                  _getCategoryIcon(item.category),
+                                  color: categoryColor,
+                                ),
+                              ),
+                              title: Text(
+                                item.title,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              subtitle: Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(item.subtitle),
+                              ),
+                              trailing: Chip(
+                                label: Text(
+                                  item.category.toUpperCase(),
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                backgroundColor: categoryColor.withAlpha(35),
+                                side: BorderSide(color: categoryColor),
                               ),
                             ),
                           ),
@@ -144,6 +185,20 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         return Icons.event;
       default:
         return Icons.schedule;
+    }
+
+  }
+
+  Color _getCategoryColor(BuildContext context, String category) {
+    switch (category.toLowerCase()) {
+      case 'exam':
+        return Theme.of(context).colorScheme.error;
+      case 'workshop':
+        return Theme.of(context).colorScheme.secondary;
+      case 'class':
+        return Theme.of(context).colorScheme.primary;
+      default:
+        return Theme.of(context).colorScheme.tertiary;
     }
   }
 }
