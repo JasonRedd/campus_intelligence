@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +10,8 @@ import 'firebase_options.dart';
 import 'screens/auth_screen.dart';
 import 'screens/assistant_screen.dart';
 import 'screens/schedule_screen.dart';
+import 'screens/profile_screen.dart';
+import 'screens/tasks_screen.dart';
 import 'services/storage_service.dart';
 
 Future<void> main() async {
@@ -145,6 +150,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool _assistantMemoryEnabled = true;
+  Uint8List? _profileImage;
 
   final List<TaskItem> _scheduleItems = [
     TaskItem(
@@ -189,6 +195,16 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadPreference();
+    _loadProfileImage();
+  }
+
+  Future<void> _loadProfileImage() async {
+    final profile = await StorageService.getProfile();
+    final encodedImage = profile['image'] ?? '';
+    if (!mounted) return;
+    setState(() {
+      _profileImage = encodedImage.isEmpty ? null : base64Decode(encodedImage);
+    });
   }
 
   Future<void> _loadPreference() async {
@@ -220,54 +236,72 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showAddTaskDialog() {
     final titleController = TextEditingController();
     final subtitleController = TextEditingController();
+    var category = 'schedule';
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add Schedule Item'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: titleController,
-              decoration: const InputDecoration(
-                labelText: 'Title (e.g. OS Lab)',
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Add item'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: category,
+                decoration: const InputDecoration(labelText: 'Type'),
+                items: const [
+                  DropdownMenuItem(value: 'schedule', child: Text('Schedule')),
+                  DropdownMenuItem(value: 'deadline', child: Text('Deadline')),
+                ],
+                onChanged: (value) {
+                  if (value != null) setDialogState(() => category = value);
+                },
               ),
+              TextField(
+                controller: titleController,
+                decoration: const InputDecoration(labelText: 'Title'),
+              ),
+              TextField(
+                controller: subtitleController,
+                decoration: InputDecoration(
+                  labelText: category == 'schedule'
+                      ? 'Details (room and time)'
+                      : 'Details (due date and notes)',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
             ),
-            TextField(
-              controller: subtitleController,
-              decoration: const InputDecoration(
-                labelText: 'Details (e.g. Room 101 • 11:00 AM)',
-              ),
+            ElevatedButton(
+              onPressed: () {
+                if (titleController.text.trim().isEmpty) return;
+                setState(() {
+                  final item = TaskItem(
+                    id: DateTime.now().millisecondsSinceEpoch.toString(),
+                    title: titleController.text.trim(),
+                    subtitle: subtitleController.text.trim().isEmpty
+                        ? category == 'schedule'
+                              ? 'Scheduled'
+                              : 'No due date specified'
+                        : subtitleController.text.trim(),
+                    category: category,
+                  );
+                  if (category == 'schedule') {
+                    _scheduleItems.add(item);
+                  } else {
+                    _deadlineItems.add(item);
+                  }
+                });
+                Navigator.pop(context);
+              },
+              child: const Text('Add'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (titleController.text.isNotEmpty) {
-                setState(() {
-                  _scheduleItems.add(
-                    TaskItem(
-                      id: DateTime.now().millisecondsSinceEpoch.toString(),
-                      title: titleController.text,
-                      subtitle: subtitleController.text.isEmpty
-                          ? 'Scheduled'
-                          : subtitleController.text,
-                      category: 'schedule',
-                    ),
-                  );
-                });
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('Add'),
-          ),
-        ],
       ),
     );
   }
@@ -275,7 +309,15 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      drawer: _buildProfileDrawer(context),
       appBar: AppBar(
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu),
+            tooltip: 'Open profile menu',
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
         title: const Text(
           'Campus Intelligence',
           style: TextStyle(fontWeight: FontWeight.bold),
@@ -336,7 +378,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const AssistantScreen(),
+                            builder: (context) => AssistantScreen(
+                              onLocalCommand: _handleAssistantCommand,
+                            ),
                           ),
                         );
                       },
@@ -398,6 +442,40 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
 
             const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const SectionHeader(title: 'Tasks & Assignments'),
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const TasksScreen()),
+                    );
+                  },
+                  child: const Text('Open tracker'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.task_alt),
+                title: const Text('Organize your coursework'),
+                subtitle: const Text(
+                  'Track progress, priorities, and upcoming deadlines.',
+                ),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const TasksScreen()),
+                  );
+                },
+              ),
+            ),
+
+            const SizedBox(height: 24),
             const SectionHeader(title: 'Recent Campus Changes'),
             const SizedBox(height: 8),
             ItemListViewCard(
@@ -407,6 +485,190 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Future<String?> _handleAssistantCommand(String prompt) async {
+    final normalized = prompt.trim();
+    final lower = normalized.toLowerCase();
+    final isSchedule = lower.contains('schedule') || lower.contains('class');
+
+    if (lower.startsWith('add schedule') || lower.startsWith('add class')) {
+      final values = _commandValues(normalized);
+      if (values.length < 4) {
+        return 'To add a class, use: add schedule | subject | room | time | professor';
+      }
+      setState(() {
+        _scheduleItems.add(
+          TaskItem(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            title: values[0],
+            subtitle: '${values[1]} • ${values[2]} • ${values[3]}',
+            category: 'schedule',
+          ),
+        );
+      });
+      return 'Added ${values[0]} to your schedule.';
+    }
+
+    if (lower.startsWith('add deadline') ||
+        lower.startsWith('add assignment')) {
+      final values = _commandValues(normalized);
+      if (values.length < 2) {
+        return 'To add a deadline, use: add deadline | title | due date and notes';
+      }
+      setState(() {
+        _deadlineItems.add(
+          TaskItem(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            title: values[0],
+            subtitle: values[1],
+            category: 'deadline',
+          ),
+        );
+      });
+      return 'Added ${values[0]} to your deadlines.';
+    }
+
+    if (lower.startsWith('edit ') || lower.startsWith('update ')) {
+      final values = _commandValues(normalized);
+      final items = isSchedule ? _scheduleItems : _deadlineItems;
+      if (values.length < 3) {
+        return isSchedule
+            ? 'To edit a class, use: edit schedule | old subject | new subject | room | time | professor'
+            : 'To edit a deadline, use: edit deadline | old title | new title | due date and notes';
+      }
+      final index = _findItemIndex(items, values[0]);
+      if (index == -1) return 'I could not find "${values[0]}".';
+      setState(() {
+        final current = items[index];
+        items[index] = TaskItem(
+          id: current.id,
+          title: values[1],
+          subtitle: isSchedule && values.length >= 5
+              ? '${values[2]} • ${values[3]} • ${values[4]}'
+              : values[2],
+          category: current.category,
+          isCompleted: current.isCompleted,
+        );
+      });
+      return 'Updated ${values[1]}.';
+    }
+
+    if (lower.startsWith('delete ') || lower.startsWith('remove ')) {
+      final items = isSchedule ? _scheduleItems : _deadlineItems;
+      final search = normalized
+          .replaceFirst(
+            RegExp(r'^(delete|remove)\s+', caseSensitive: false),
+            '',
+          )
+          .replaceFirst(
+            RegExp(
+              r'^(schedule|class|deadline|assignment)\s+',
+              caseSensitive: false,
+            ),
+            '',
+          )
+          .trim();
+      final index = _findItemIndex(items, search);
+      if (index == -1) return 'I could not find "$search".';
+      final removed = items[index].title;
+      setState(() => items.removeAt(index));
+      return 'Removed $removed.';
+    }
+
+    if (lower.startsWith('complete ') || lower.startsWith('mark done ')) {
+      final items = _deadlineItems;
+      final search = normalized
+          .replaceFirst(
+            RegExp(r'^(complete|mark done)\s+', caseSensitive: false),
+            '',
+          )
+          .trim();
+      final index = _findItemIndex(items, search);
+      if (index == -1) return 'I could not find deadline "$search".';
+      setState(() => items[index].isCompleted = true);
+      return 'Marked ${items[index].title} as completed.';
+    }
+
+    return null;
+  }
+
+  List<String> _commandValues(String command) {
+    return command
+        .split('|')
+        .skip(1)
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList();
+  }
+
+  int _findItemIndex(List<TaskItem> items, String search) {
+    final query = search.toLowerCase();
+    return items.indexWhere(
+      (item) =>
+          item.title.toLowerCase() == query ||
+          item.title.toLowerCase().contains(query),
+    );
+  }
+
+  Widget _buildProfileDrawer(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    final email = user?.email ?? 'No email';
+
+    return Drawer(
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          UserAccountsDrawerHeader(
+            accountName: const Text('Student Profile'),
+            accountEmail: Text(email),
+            currentAccountPicture: CircleAvatar(
+              backgroundColor: Theme.of(context).colorScheme.onPrimary,
+              backgroundImage: _profileImage == null
+                  ? null
+                  : MemoryImage(_profileImage!),
+              child: _profileImage == null
+                  ? Text(
+                      email.isNotEmpty ? email[0].toUpperCase() : 'S',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    )
+                  : null,
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.person_outline),
+            title: const Text('Profile'),
+            subtitle: Text(email),
+            onTap: () async {
+              Navigator.pop(context);
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => ProfileScreen(email: email)),
+              );
+              await _loadProfileImage();
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.badge_outlined),
+            title: const Text('User ID'),
+            subtitle: Text(user?.uid ?? 'Not logged in'),
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.logout, color: Colors.red),
+            title: const Text('Sign out', style: TextStyle(color: Colors.red)),
+            onTap: () async {
+              Navigator.pop(context);
+              await FirebaseAuth.instance.signOut();
+            },
+          ),
+        ],
       ),
     );
   }

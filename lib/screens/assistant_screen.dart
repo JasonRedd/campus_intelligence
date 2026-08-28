@@ -5,12 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
 class AssistantScreen extends StatefulWidget {
-  const AssistantScreen({super.key});
+  final Future<String?> Function(String prompt)? onLocalCommand;
+
+  const AssistantScreen({super.key, this.onLocalCommand});
 
   @override
   State<AssistantScreen> createState() => _AssistantScreenState();
@@ -48,30 +49,14 @@ class _AssistantScreenState extends State<AssistantScreen> {
     return _messagesCollection(uid).orderBy('timestamp');
   }
 
-  Future<String?> _uploadImage(Uint8List bytes, String mimeType) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return null;
-    final ref = FirebaseStorage.instance.ref().child(
-      'users/$uid/chat_images/${DateTime.now().microsecondsSinceEpoch}',
-    );
-    final metadata = SettableMetadata(contentType: mimeType);
-    final task = await ref.putData(bytes, metadata);
-    return task.ref.getDownloadURL();
-  }
-
   Future<void> _saveMessage({
     required String text,
     required bool isUser,
-    String? imageUrl,
   }) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
-    await _messagesCollection(uid).add({
-      'text': text,
-      'isUser': isUser,
-      ...?imageUrl == null ? null : {'imageUrl': imageUrl},
-      'timestamp': Timestamp.now(),
-    });
+    await _messagesCollection(uid)
+        .add({'text': text, 'isUser': isUser, 'timestamp': Timestamp.now()});
   }
 
   Future<void> _pickImage() async {
@@ -137,15 +122,18 @@ class _AssistantScreenState extends State<AssistantScreen> {
     _scrollToBottom();
 
     try {
-      final imageUrl = imageBytes == null
-          ? null
-          : await _uploadImage(imageBytes, imageMimeType ?? 'image/jpeg');
-      await _saveMessage(text: prompt, isUser: true, imageUrl: imageUrl);
-      final responseText = await _callGeminiApi(
-        prompt,
-        imageBytes: imageBytes,
-        imageMimeType: imageMimeType,
-      );
+      // Images are sent directly to Gemini; cloud image storage is optional.
+      await _saveMessage(text: prompt, isUser: true);
+      final localResponse = imageBytes == null && widget.onLocalCommand != null
+          ? await widget.onLocalCommand!(prompt)
+          : null;
+      final responseText =
+          localResponse ??
+          await _callGeminiApi(
+            prompt,
+            imageBytes: imageBytes,
+            imageMimeType: imageMimeType,
+          );
       await _saveMessage(text: responseText, isUser: false);
     } catch (e) {
       await _saveMessage(text: 'Connection Error: $e', isUser: false);
@@ -192,6 +180,21 @@ class _AssistantScreenState extends State<AssistantScreen> {
     }
     parts.add({'text': prompt});
 
+    final historyStart = _messages.length > 21 ? _messages.length - 21 : 0;
+    final history = _messages.length > 1
+        ? _messages.sublist(historyStart, _messages.length - 1)
+        : const <ChatMessage>[];
+    final contents = <Map<String, dynamic>>[
+      for (final message in history)
+        {
+          'role': message.isUser ? 'user' : 'model',
+          'parts': [
+            {'text': message.text},
+          ],
+        },
+      {'role': 'user', 'parts': parts},
+    ];
+
     final Map<String, dynamic> body = {
       'system_instruction': {
         'parts': [
@@ -206,9 +209,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
           },
         ],
       },
-      'contents': [
-        {'parts': parts},
-      ],
+      'contents': contents,
     };
 
     try {
@@ -273,6 +274,12 @@ class _AssistantScreenState extends State<AssistantScreen> {
     });
   }
 
+  Future<void> _signOut() async {
+    await FirebaseAuth.instance.signOut();
+    if (!mounted) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -292,7 +299,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
           IconButton(
             icon: const Icon(Icons.logout_rounded),
             tooltip: 'Sign out',
-            onPressed: () => FirebaseAuth.instance.signOut(),
+            onPressed: _signOut,
           ),
         ],
       ),
@@ -454,7 +461,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
             title: const Text('Sign out', style: TextStyle(color: Colors.red)),
             onTap: () async {
               Navigator.pop(context);
-              await FirebaseAuth.instance.signOut();
+              await _signOut();
             },
           ),
         ],
